@@ -29,7 +29,7 @@ static void* mm_get_new_vm_page_from_kernel(int units){
     return (void *)vm_page;
 }
 
-// FUnctino to return a page to kernel
+// Function to return a page to kernel
 static void mm_return_vm_page_to_kernel (void *vm_page, int units){
 
     if (munmap(vm_page, units * SYSTEM_PAGE_SIZE)){
@@ -43,5 +43,7 @@ int main(int argc, char **argv){
     void *addr1 = mm_get_new_vm_page_from_kernel(1);
     void *addr2 = mm_get_new_vm_page_from_kernel(1);
     printf("page 1 = %p, page 2 = %p\n", addr1, addr2);
+    mm_return_vm_page_to_kernel(addr1, 1);
+    mm_return_vm_page_to_kernel(addr2, 1);
     return 0;
 }
