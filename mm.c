@@ -5,7 +5,11 @@
 #include <memory.h>
 #include <unistd.h> // for getPageSize
 #include <sys/mman.h>  // for using mmap()
+#include <stdint-gcc.h>
+#include <assert.h>
+#include "mm.h"
 
+static vm_page_for_families_t *first_vm_page_for_families = NULL;
 static size_t SYSTEM_PAGE_SIZE = 0;
 
 void mm_init(){
@@ -35,6 +39,54 @@ static void mm_return_vm_page_to_kernel (void *vm_page, int units){
     if (munmap(vm_page, units * SYSTEM_PAGE_SIZE)){
         printf("Error: Could not munmap VM page to kernel");
     }
+}
+
+void mm_instantiate_new_page(char *struct_name, uint32_t struct_size){
+
+    vm_page_family_t *vm_page_family_curr = NULL;
+    vm_page_for_families_t *new_vm_page_for_families = NULL;
+
+    if (struct_size > SYSTEM_PAGE_SIZE){
+        printf("Error: %s() Structure %s Size exceeds system page size\n" ,
+               __FUNCTION__ , struct_name
+               );
+        return;
+    }
+
+    if (!first_vm_page_for_families){
+        first_vm_page_for_families =  (vm_page_for_families_t *) mm_get_new_vm_page_from_kernel(1);
+        first_vm_page_for_families->next = NULL;
+        strncpy(first_vm_page_for_families->vm_page_family[0].struct_name, struct_name, MM_MAX_STRUCT_NAME);
+        first_vm_page_for_families->vm_page_family[0].struct_size = struct_size;
+        return;
+    }
+
+    uint32_t count = 0;
+
+    ITERATE_PAGE_FAMILIES_BEGIN(first_vm_page_for_families, vm_page_family_curr)
+        if (strncmp(vm_page_family_curr->struct_name,
+                    struct_name, MM_MAX_STRUCT_NAME) != 0) {
+            count++;
+            continue; // try next slot
+        }
+        // Family already exists — could handle error
+        assert(0);
+    ITERATE_PAGE_FAMILIES_END(first_vm_page_for_families, vm_page_family_curr);
+
+    // If current metadata page is full, allocate a new one
+    if (count == MAX_FAMILIES_PER_VM_PAGE) {
+        vm_page_for_families_t *new_vm_page_for_families =
+                (vm_page_for_families_t *)mm_get_new_vm_page_from_kernel(1);
+        new_vm_page_for_families->next = first_vm_page_for_families;
+        first_vm_page_for_families = new_vm_page_for_families;
+        vm_page_family_curr = &first_vm_page_for_families->vm_page_family[0];
+    }
+
+    // Fill the free slot with new family info
+    strncpy(vm_page_family_curr->struct_name, struct_name, MM_MAX_STRUCT_NAME);
+    vm_page_family_curr->struct_size = struct_size;
+    vm_page_family_curr->first_page = NULL;
+
 }
 
 int main(int argc, char **argv){
